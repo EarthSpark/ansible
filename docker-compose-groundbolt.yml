@@ -344,27 +344,6 @@
       ignore_errors: true
       when: FORCE_REPULL | default(false) | bool
 
-    - name: Force-pull required images from GitLab
-      community.docker.docker_image:
-        name: "{{ item }}"
-        source: pull
-        force_source: true
-      with_items:
-        - "{{ symmetricds_image }}"
-        - "{{ sparkmeter_image }}"
-        - "{{ slipstreamj_image }}"
-      when: FORCE_REPULL | default(false) | bool
-
-    - name: Pull images from GitLab (if not present)
-      community.docker.docker_image:
-        name: "{{ item }}"
-        source: pull
-      with_items:
-        - "{{ symmetricds_image }}"
-        - "{{ sparkmeter_image }}"
-        - "{{ slipstreamj_image }}"
-      when: not (FORCE_REPULL | default(false) | bool)
-
     - name: Stop compose stack before volume reset
       community.docker.docker_compose_v2:
         project_src: "{{ project_root }}"
@@ -390,7 +369,7 @@
         state: present
         recreate: auto
         remove_orphans: true
-        pull: always
+        pull: missing
       register: compose_result
 
     - name: Show docker-compose changes
