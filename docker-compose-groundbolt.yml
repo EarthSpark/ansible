@@ -1,0 +1,423 @@
+---
+- name: Provision GroundBolt docker-compose stack
+  hosts: groundbolt
+  become: false
+  gather_facts: yes
+  collections:
+    - community.docker
+
+  vars:
+    project_root: /opt/groundbolt
+    compose_file: docker-compose.yml
+    compose_project_name: groundbolt
+
+    # Core service config
+    postgres_db: mydb
+    postgres_user: spark
+    postgres_password: "{{ VAULT_POSTGRES_PASSWORD }}"
+
+    rabbitmq_user: guest
+    rabbitmq_pass: guest
+
+    # SymmetricDS
+    symmetricds_tag: "{{ SYMMETRICDS_TAG | default('3.7.38.0') }}"
+    compose_env_dir: /etc/compose.d
+
+    # GitLab Container Registry
+    gitlab_registry: registry.gitlab.com
+    gitlab_registry_user: "{{ GITLAB_REGISTRY_USER | default('gitlab-ci-token') }}"
+    gitlab_registry_token: "{{ GITLAB_REGISTRY_TOKEN }}"
+    sparkmeter_image: "{{ gitlab_registry }}/sparkmeter/sparkmeter:{{ SPARKMETER_TAG | default('latest') }}"
+    slipstreamj_image: "{{ gitlab_registry }}/sparkmeter/slipstreamj:{{ SLIPSTREAMJ_TAG | default('latest') }}"
+    symmetricds_image: "{{ gitlab_registry }}/sparkmeter/docker-symmetricds:{{ symmetricds_tag }}"
+
+    # Tailscale (remote access)
+    enable_tailscale: true
+    tailscale_authkey: "{{ TAILSCALE_AUTHKEY | default('') }}"
+    tailscale_up_args: "{{ TAILSCALE_UP_ARGS | default('--accept-routes --ssh') }}"  # extra flags for tailscale up
+    tailscale_state_dir: /var/lib/tailscale
+
+    # WiFi AP (hostapd)
+    enable_wifi_ap: false
+    wifi_interface: wlan0
+    wifi_country: US
+    wifi_ssid: GroundBolt
+    wifi_wpa_passphrase: "{{ WIFI_WPA_PASSPHRASE | default('changeme', true) }}"
+    wifi_subnet_cidr: 10.42.0.0/24
+    wifi_router_ip: 10.42.0.1
+    wifi_dhcp_range_start: 10.42.0.10
+    wifi_dhcp_range_end: 10.42.0.100
+
+    # USB gateway device path and dialout group id (verify on target)
+    gateway_serial: "{{ GATEWAY_SERIAL | default('', true) }}"
+    flasher_serial: "{{ FLASHER_SERIAL | default('', true) }}"
+    usb_gateway_device: /dev/gateway
+    dialout_gid: 20
+
+    # Docker install method
+    docker_apt_repo_channel: stable
+
+  pre_tasks:
+
+    - name: Ensure APT prerequisites present
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+        state: present
+        update_cache: yes
+
+    - name: Compute dpkg architecture
+      ansible.builtin.set_fact:
+        dpkg_arch: "{{ 'amd64' if ansible_facts['architecture'] == 'x86_64' else ('arm64' if ansible_facts['architecture'] == 'aarch64' else 'armhf') }}"
+
+    - name: Compute repository OS and codenames (Docker/Tailscale)
+      ansible.builtin.set_fact:
+        docker_repo_os: "{{ 'ubuntu' if ansible_facts['distribution'] | lower == 'ubuntu' else 'debian' }}"
+        docker_repo_codename: >-
+          {{
+            (ansible_facts['lsb']['codename'] | lower)
+            if (ansible_facts['distribution'] | lower == 'ubuntu')
+            else (
+              'bookworm' if (ansible_facts['lsb']['codename'] | lower) in ['trixie','sid','testing','unstable']
+              else (ansible_facts['lsb']['codename'] | lower)
+            )
+          }}
+        tailscale_repo_os: "{{ 'ubuntu' if ansible_facts['distribution'] | lower == 'ubuntu' else 'debian' }}"
+        tailscale_repo_codename: >-
+          {{
+            (ansible_facts['lsb']['codename'] | lower)
+            if (ansible_facts['distribution'] | lower == 'ubuntu')
+            else (
+              'bookworm' if (ansible_facts['lsb']['codename'] | lower) in ['trixie','sid','testing','unstable']
+              else (ansible_facts['lsb']['codename'] | lower)
+            )
+          }}
+
+    - name: Add Docker GPG keyring (idempotent)
+      ansible.builtin.shell: |
+        set -e
+        install -m 0755 -d /etc/apt/keyrings
+        rm -f /etc/apt/keyrings/docker.gpg.tmp
+        curl -fsSL https://download.docker.com/linux/{{ docker_repo_os }}/gpg | gpg --batch --yes --dearmor -o /etc/apt/keyrings/docker.gpg.tmp
+        cmp -s /etc/apt/keyrings/docker.gpg.tmp /etc/apt/keyrings/docker.gpg || mv /etc/apt/keyrings/docker.gpg.tmp /etc/apt/keyrings/docker.gpg
+        chmod a+r /etc/apt/keyrings/docker.gpg
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Add Docker apt repository
+      ansible.builtin.apt_repository:
+        repo: "deb [arch={{ dpkg_arch }} signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/{{ docker_repo_os }} {{ docker_repo_codename }} {{ docker_apt_repo_channel }}"
+        state: present
+
+    - name: Install Docker engine and compose plugin
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-compose-plugin
+        state: present
+        update_cache: yes
+
+    - name: Ensure docker service running
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add spark user to docker group (if exists)
+      ansible.builtin.user:
+        name: spark
+        groups: docker
+        append: yes
+      ignore_errors: yes
+
+    - name: Install Tailscale apt key (idempotent)
+      ansible.builtin.shell: |
+        set -e
+        install -m 0755 -d /etc/apt/keyrings
+        rm -f /etc/apt/keyrings/tailscale.gpg.tmp
+        curl -fsSL https://pkgs.tailscale.com/stable/{{ tailscale_repo_os }}/{{ tailscale_repo_codename }}.noarmor.gpg | gpg --batch --yes --dearmor -o /etc/apt/keyrings/tailscale.gpg.tmp
+        cmp -s /etc/apt/keyrings/tailscale.gpg.tmp /etc/apt/keyrings/tailscale.gpg || mv /etc/apt/keyrings/tailscale.gpg.tmp /etc/apt/keyrings/tailscale.gpg
+        chmod a+r /etc/apt/keyrings/tailscale.gpg
+      args:
+        executable: /bin/bash
+      changed_when: false
+      when: enable_tailscale | bool
+
+    - name: Add Tailscale apt repo
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/etc/apt/keyrings/tailscale.gpg] https://pkgs.tailscale.com/stable/{{ tailscale_repo_os }} {{ tailscale_repo_codename }} main"
+        state: present
+      when: enable_tailscale | bool
+
+    - name: Install Tailscale
+      ansible.builtin.apt:
+        name: tailscale
+        state: present
+        update_cache: yes
+      when: enable_tailscale | bool
+
+    - name: Ensure Tailscale state dir
+      ansible.builtin.file:
+        path: "{{ tailscale_state_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+      when: enable_tailscale | bool
+
+    - name: Bring up Tailscale (auth if needed)
+      ansible.builtin.shell: |
+        set -e
+        HOSTNAME=$(grep Serial /proc/cpuinfo | cut -d ' ' -f 2)
+        if ! tailscale status >/dev/null 2>&1; then
+          tailscale up --authkey={{ tailscale_authkey }} --hostname="${HOSTNAME}" {{ tailscale_up_args }}
+        else
+          tailscale up --hostname="${HOSTNAME}" {{ tailscale_up_args }}
+        fi
+      args:
+        executable: /bin/bash
+      when: enable_tailscale | bool
+
+    - name: Enable and start tailscaled
+      ansible.builtin.service:
+        name: tailscaled
+        state: started
+        enabled: yes
+      when: enable_tailscale | bool
+
+  tasks:
+    - name: Install WiFi AP packages
+      ansible.builtin.apt:
+        name:
+          - hostapd
+          - isc-dhcp-server
+          - iptables
+        state: present
+        update_cache: yes
+      when: enable_wifi_ap | bool
+
+    - name: Configure /etc/default/hostapd
+      ansible.builtin.copy:
+        dest: /etc/default/hostapd
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          DAEMON_CONF="/etc/hostapd/hostapd.conf"
+      when: enable_wifi_ap | bool
+      notify: Restart hostapd
+
+    - name: Render /etc/hostapd/hostapd.conf
+      ansible.builtin.template:
+        src: templates/wifi/hostapd.conf.j2
+        dest: /etc/hostapd/hostapd.conf
+        owner: root
+        group: root
+        mode: '0644'
+      when: enable_wifi_ap | bool
+      notify: Restart hostapd
+
+    - name: Render /etc/dhcp/dhcpd.conf
+      ansible.builtin.template:
+        src: templates/wifi/dhcpd.conf.j2
+        dest: /etc/dhcp/dhcpd.conf
+        owner: root
+        group: root
+        mode: '0644'
+      when: enable_wifi_ap | bool
+      notify: Restart isc-dhcp-server
+
+    - name: Enable and start hostapd and isc-dhcp-server
+      ansible.builtin.service:
+        name: "{{ item }}"
+        state: started
+        enabled: yes
+      loop:
+        - hostapd
+        - isc-dhcp-server
+      when: enable_wifi_ap | bool
+
+    - name: Create project directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      loop:
+        - "{{ project_root }}"
+        - "{{ project_root }}/secrets"
+        - "{{ compose_env_dir }}"
+
+    - name: Template docker-compose.yml
+      ansible.builtin.template:
+        src: templates/docker-compose.yml.j2
+        dest: "{{ project_root }}/{{ compose_file }}"
+        owner: root
+        group: root
+        mode: '0644'
+
+
+    - name: Template SymmetricDS environment file
+      ansible.builtin.template:
+        src: templates/compose.d/prod-symmetricds.env.j2
+        dest: "{{ compose_env_dir }}/prod-symmetricds.env"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Place .env for compose (app secrets)
+      ansible.builtin.copy:
+        dest: "{{ project_root }}/.env"
+        owner: root
+        group: root
+        mode: '0640'
+        content: |
+          POSTGRES_PASSWORD={{ postgres_password }}
+          SYMMETRICDS_TAG={{ symmetricds_tag }}
+          TAILSCALE_AUTHKEY={{ tailscale_authkey }}
+          TAILSCALE_UP_ARGS={{ tailscale_up_args }}
+
+    - name: Configure Docker daemon
+      ansible.builtin.copy:
+        dest: /etc/docker/daemon.json
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          {
+            "log-driver": "json-file",
+            "log-opts": {
+              "max-size": "10m",
+              "max-file": "3"
+            }
+          }
+      notify: Restart docker
+
+    - name: Ensure docker is restarted if config changed
+      ansible.builtin.meta: flush_handlers
+
+    - name: Install USB serial udev rule
+      ansible.builtin.template:
+        src: templates/udev/98-usb-serial.rules.j2
+        dest: /etc/udev/rules.d/98-usb-serial.rules
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Reload udev rules
+
+    - name: Ensure udev rules are reloaded if changed
+      ansible.builtin.meta: flush_handlers
+
+    - name: Log in to GitLab Container Registry
+      community.docker.docker_login:
+        registry_url: "https://{{ gitlab_registry }}"
+        username: "{{ gitlab_registry_user }}"
+        password: "{{ gitlab_registry_token }}"
+
+    - name: Restart docker before image maintenance
+      ansible.builtin.service:
+        name: docker
+        state: restarted
+      when: FORCE_REPULL | default(false) | bool
+
+    - name: Prune unused images to clear broken cache
+      ansible.builtin.shell: docker image prune -a -f || true
+      changed_when: false
+      when: FORCE_REPULL | default(false) | bool
+
+    - name: Remove possibly corrupted cached images (force repull)
+      community.docker.docker_image:
+        name: "{{ item }}"
+        state: absent
+        force_absent: true
+      with_items:
+        - "{{ symmetricds_image }}"
+        - "{{ sparkmeter_image }}"
+        - "{{ slipstreamj_image }}"
+      ignore_errors: true
+      when: FORCE_REPULL | default(false) | bool
+
+    - name: Force-pull required images from GitLab
+      community.docker.docker_image:
+        name: "{{ item }}"
+        source: pull
+        force_source: true
+      with_items:
+        - "{{ symmetricds_image }}"
+        - "{{ sparkmeter_image }}"
+        - "{{ slipstreamj_image }}"
+      when: FORCE_REPULL | default(false) | bool
+
+    - name: Pull images from GitLab (if not present)
+      community.docker.docker_image:
+        name: "{{ item }}"
+        source: pull
+      with_items:
+        - "{{ symmetricds_image }}"
+        - "{{ sparkmeter_image }}"
+        - "{{ slipstreamj_image }}"
+      when: not (FORCE_REPULL | default(false) | bool)
+
+    - name: Stop compose stack before volume reset
+      community.docker.docker_compose_v2:
+        project_src: "{{ project_root }}"
+        files:
+          - "{{ compose_file }}"
+        project_name: "{{ compose_project_name }}"
+        state: absent
+      when: RESET_DATABASE | default(false) | bool
+      ignore_errors: true
+
+    - name: Remove postgres volume for fresh init
+      community.docker.docker_volume:
+        name: "{{ compose_project_name }}_pg_data"
+        state: absent
+      when: RESET_DATABASE | default(false) | bool
+
+    - name: Bring up docker-compose stack (ensure running)
+      community.docker.docker_compose_v2:
+        project_src: "{{ project_root }}"
+        files:
+          - "{{ compose_file }}"
+        project_name: "{{ compose_project_name }}"
+        state: present
+        recreate: auto
+        remove_orphans: true
+        pull: always
+      register: compose_result
+
+    - name: Show docker-compose changes
+      ansible.builtin.debug:
+        var: compose_result
+      when: compose_result is defined
+
+  handlers:
+    - name: Reload udev rules
+      ansible.builtin.shell: |
+        set -e
+        udevadm control --reload-rules
+        udevadm trigger
+      args:
+        executable: /bin/bash
+
+    - name: Restart hostapd
+      ansible.builtin.service:
+        name: hostapd
+        state: restarted
+
+    - name: Restart isc-dhcp-server
+      ansible.builtin.service:
+        name: isc-dhcp-server
+        state: restarted
+
+    - name: Restart docker
+      ansible.builtin.service:
+        name: docker
+        state: restarted 

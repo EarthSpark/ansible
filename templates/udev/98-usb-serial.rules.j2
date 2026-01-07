@@ -1,0 +1,20 @@
+# Managed by Ansible - USB serial udev rules for gateway/flasher
+
+# SparkMeter USB Gateway (Zephyr-based, vendor 2886, product 8044)
+# Creates /dev/gateway (ACM interface 02) and /dev/gateway-debug (ACM interface 00)
+SUBSYSTEM=="tty", ATTRS{idVendor}=="2886", ATTRS{idProduct}=="8044", ENV{ID_USB_INTERFACE_NUM}=="02", SYMLINK+="gateway", MODE="0666"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="2886", ATTRS{idProduct}=="8044", ENV{ID_USB_INTERFACE_NUM}=="00", SYMLINK+="gateway-debug", MODE="0666"
+
+# Legacy FTDI device (vendor 0403, product 6001)
+{% if gateway_serial | default('') %}
+# configure the /dev/gateway symlink for the {{ gateway_serial }} device
+SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", ATTRS{serial}=="{{ gateway_serial }}", SYMLINK+="gateway", MODE="0666"
+{% else %}
+# configure the /dev/gateway symlink for any FTDI device
+SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", SYMLINK+="gateway", MODE="0666"
+{% endif %}
+
+{% if flasher_serial | default('') %}
+# configure the /dev/flasher symlink
+SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", ATTRS{serial}=="{{ flasher_serial }}", SYMLINK+="flasher", MODE="0666"
+{% endif %} 
