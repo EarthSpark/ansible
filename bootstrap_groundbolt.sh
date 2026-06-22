@@ -179,7 +179,7 @@ fetch_from_fileserver() {
   echo "Fetching Ansible files from $base_url ..."
   # List of required files relative to the server root (served from the repo dir)
   local files=(
-    "docker-compose-groundbolt.yml"
+    "playbook.yml"
     "templates/docker-compose.yml.j2"
     "templates/compose.d/prod-symmetricds.env.j2"
     "templates/udev/98-usb-serial.rules.j2"
@@ -195,7 +195,7 @@ fetch_from_fileserver() {
 
 # Obtain the playbook + templates: clone the repo (durable, refreshed on re-run)
 # or download from a file server.
-PLAYBOOK_PATH="docker-compose-groundbolt.yml"
+PLAYBOOK_PATH="playbook.yml"
 REPO_DIR="${WORKDIR}/repo"
 if [[ -n "$REPO_URL" ]]; then
   if [[ -d "$REPO_DIR/.git" ]]; then

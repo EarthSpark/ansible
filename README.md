@@ -3,14 +3,14 @@
 Provisions a GroundBolt host from a single bootstrap command. `bootstrap_groundbolt.sh`
 runs **on the target device**: it resolves configuration into a durable
 inventory, installs Docker and the NetBird client, downloads the playbook and
-templates, then runs `docker-compose-groundbolt.yml` against `localhost` to bring
-up the docker-compose stack. Ansible runs locally on the target — there is no
-control node and no push over SSH.
+templates, then runs `playbook.yml` against `localhost` to bring up the
+docker-compose stack. Ansible runs locally on the target — there is no control
+node and no push over SSH.
 
 The pieces:
 
 - `bootstrap_groundbolt.sh` — the bootstrapper that runs on the target.
-- `docker-compose-groundbolt.yml` — the Ansible playbook.
+- `playbook.yml` — the Ansible playbook.
 - `templates/` — Jinja2 templates the playbook renders onto the target.
 
 ## Configuration & secrets
@@ -74,7 +74,7 @@ the latest `main` without re-cloning by hand.
 
 Clone the repo on your machine and start a web server **from inside the repo
 folder** — the bootstrap expects the files at the server root
-(`docker-compose-groundbolt.yml`, `templates/...`):
+(`playbook.yml`, `templates/...`):
 
 ```sh
 git clone git@gitlab.com:sparkmeter/earthspark/ansible.git
