@@ -2,7 +2,12 @@
 x-app-env: &app_env
   APP_ENV: production
   DATABASE_URL: postgresql://{{ postgres_user }}:{{ postgres_password }}@postgres:5432/{{ postgres_db }}
-  RABBITMQ_URL: amqp://{{ rabbitmq_user }}:{{ rabbitmq_pass }}@rabbitmq:5672//
+
+x-logging: &default_logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
 
 services:
   postgres:
@@ -13,11 +18,7 @@ services:
       POSTGRES_PASSWORD: {{ postgres_password }}
     volumes:
       - pg_data:/var/lib/postgresql/data
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *default_logging
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U {{ postgres_user }} -d {{ postgres_db }} -h localhost"]
       interval: 10s
@@ -25,146 +26,35 @@ services:
       retries: 10
       start_period: 20s
 
-  rabbitmq:
-    image: rabbitmq:3-management
-    ports:
-      - "15672:15672"
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
+  # The single webapp service. Hypercorn binds two ASGI listeners in one
+  # process: port 5000 for public traffic (mapped externally to host port 80),
+  # port 5001 for internal admin/proxy endpoints (NOT mapped — only reachable
+  # from inside the container via `docker compose exec`).
+  #
+  # On ground deployments the FastAPI lifespan spawns the Ohm subprocess (the
+  # binary is baked into the image at /usr/local/bin/ohm) and owns it for the
+  # lifetime of the container. The container needs the host's gateway serial
+  # device passed in for that to work.
   app:
     image: {{ sparkmeter_image }}
     command: /app/run/webapp
     environment:
       <<: *app_env
+      OHM_BINARY: /usr/local/bin/ohm
     ports:
       - "80:5000"
+    devices:
+      - "{{ usb_gateway_device }}:/dev/gateway"
+    group_add:
+      - "{{ dialout_gid }}"
     depends_on:
       postgres:
         condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *default_logging
+    restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5000/health || exit 1"]
       interval: 10s
-      timeout: 5s
-      retries: 10
-
-  celery-gateway:
-    image: {{ sparkmeter_image }}
-    command: /app/run/celery/worker/gateway
-    environment:
-      <<: *app_env
-    depends_on:
-      postgres:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    healthcheck:
-      test: ["CMD-SHELL", "/app/venv/bin/celery -A sparkmeter.celery_app:celery status >/dev/null 2>&1"]
-      interval: 15s
-      timeout: 5s
-      retries: 10
-
-  celery-sparkmac:
-    image: {{ sparkmeter_image }}
-    command: /app/run/celery/worker/sparkmac
-    environment:
-      <<: *app_env
-    depends_on:
-      postgres:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    healthcheck:
-      test: ["CMD-SHELL", "/app/venv/bin/celery -A sparkmeter.celery_app:celery status >/dev/null 2>&1"]
-      interval: 15s
-      timeout: 5s
-      retries: 10
-
-  celery-app:
-    image: {{ sparkmeter_image }}
-    command: /app/run/celery/worker/app
-    environment:
-      <<: *app_env
-    depends_on:
-      postgres:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    healthcheck:
-      test: ["CMD-SHELL", "/app/venv/bin/celery -A sparkmeter.celery_app:celery status >/dev/null 2>&1"]
-      interval: 15s
-      timeout: 5s
-      retries: 10
-
-  celery-transactions:
-    image: {{ sparkmeter_image }}
-    command: /app/run/celery/worker/transactions
-    environment:
-      <<: *app_env
-    depends_on:
-      postgres:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    healthcheck:
-      test: ["CMD-SHELL", "/app/venv/bin/celery -A sparkmeter.celery_app:celery status >/dev/null 2>&1"]
-      interval: 15s
-      timeout: 5s
-      retries: 10
-
-  celery-beat:
-    image: {{ sparkmeter_image }}
-    command: /app/run/celery/beat
-    environment:
-      <<: *app_env
-    depends_on:
-      postgres:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    healthcheck:
-      test: ["CMD-SHELL", "test -n \"$$(/bin/ps -o pid= -C celery-beat)\""]
-      interval: 15s
       timeout: 5s
       retries: 10
 
@@ -174,41 +64,10 @@ services:
     env_file:
       - {{ compose_env_dir }}/prod-symmetricds.env
     network_mode: host
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *default_logging
     healthcheck:
       test: ["CMD-SHELL", "nc -z localhost ${SYMDS_PORT:-31415}"]
       interval: 10s
-      timeout: 5s
-      retries: 10
-
-  slipstream:
-    image: {{ slipstreamj_image }}
-    privileged: true
-    pull_policy: always
-    volumes:
-      - /dev:/dev
-    group_add:
-      - "{{ dialout_gid }}"
-    environment:
-      <<: *app_env
-      SLIPSTREAM_DEVICE: {{ usb_gateway_device }}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    healthcheck:
-      test: ["CMD-SHELL", "pgrep -f slipstream >/dev/null 2>&1"]
-      interval: 15s
       timeout: 5s
       retries: 10
 

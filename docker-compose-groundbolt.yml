@@ -31,11 +31,11 @@
     slipstreamj_image: "{{ gitlab_registry }}/sparkmeter/slipstreamj:{{ SLIPSTREAMJ_TAG | default('latest') }}"
     symmetricds_image: "{{ gitlab_registry }}/sparkmeter/docker-symmetricds:{{ symmetricds_tag }}"
 
-    # Tailscale (remote access)
-    enable_tailscale: true
-    tailscale_authkey: "{{ TAILSCALE_AUTHKEY | default('') }}"
-    tailscale_up_args: "{{ TAILSCALE_UP_ARGS | default('--accept-routes --ssh') }}"  # extra flags for tailscale up
-    tailscale_state_dir: /var/lib/tailscale
+    # NetBird (remote access)
+    enable_netbird: true
+    netbird_setup_key: "{{ NETBIRD_SETUP_KEY | default('') }}"
+    netbird_management_url: "{{ NETBIRD_MANAGEMENT_URL | default('') }}"  # empty = NetBird Cloud (https://api.netbird.io); set for self-hosted
+    netbird_up_args: "{{ NETBIRD_UP_ARGS | default('--allow-server-ssh') }}"  # extra flags for netbird up
 
     # WiFi AP (hostapd)
     enable_wifi_ap: false
@@ -73,20 +73,10 @@
       ansible.builtin.set_fact:
         dpkg_arch: "{{ 'amd64' if ansible_facts['architecture'] == 'x86_64' else ('arm64' if ansible_facts['architecture'] == 'aarch64' else 'armhf') }}"
 
-    - name: Compute repository OS and codenames (Docker/Tailscale)
+    - name: Compute repository OS and codename (Docker)
       ansible.builtin.set_fact:
         docker_repo_os: "{{ 'ubuntu' if ansible_facts['distribution'] | lower == 'ubuntu' else 'debian' }}"
         docker_repo_codename: >-
-          {{
-            (ansible_facts['lsb']['codename'] | lower)
-            if (ansible_facts['distribution'] | lower == 'ubuntu')
-            else (
-              'bookworm' if (ansible_facts['lsb']['codename'] | lower) in ['trixie','sid','testing','unstable']
-              else (ansible_facts['lsb']['codename'] | lower)
-            )
-          }}
-        tailscale_repo_os: "{{ 'ubuntu' if ansible_facts['distribution'] | lower == 'ubuntu' else 'debian' }}"
-        tailscale_repo_codename: >-
           {{
             (ansible_facts['lsb']['codename'] | lower)
             if (ansible_facts['distribution'] | lower == 'ubuntu')
@@ -136,60 +126,55 @@
         append: yes
       ignore_errors: yes
 
-    - name: Install Tailscale apt key (idempotent)
+    - name: Install NetBird apt key (idempotent)
       ansible.builtin.shell: |
         set -e
         install -m 0755 -d /etc/apt/keyrings
-        rm -f /etc/apt/keyrings/tailscale.gpg.tmp
-        curl -fsSL https://pkgs.tailscale.com/stable/{{ tailscale_repo_os }}/{{ tailscale_repo_codename }}.noarmor.gpg | gpg --batch --yes --dearmor -o /etc/apt/keyrings/tailscale.gpg.tmp
-        cmp -s /etc/apt/keyrings/tailscale.gpg.tmp /etc/apt/keyrings/tailscale.gpg || mv /etc/apt/keyrings/tailscale.gpg.tmp /etc/apt/keyrings/tailscale.gpg
-        chmod a+r /etc/apt/keyrings/tailscale.gpg
+        rm -f /etc/apt/keyrings/netbird.gpg.tmp
+        curl -fsSL https://pkgs.netbird.io/debian/public.key | gpg --batch --yes --dearmor -o /etc/apt/keyrings/netbird.gpg.tmp
+        cmp -s /etc/apt/keyrings/netbird.gpg.tmp /etc/apt/keyrings/netbird.gpg || mv /etc/apt/keyrings/netbird.gpg.tmp /etc/apt/keyrings/netbird.gpg
+        chmod a+r /etc/apt/keyrings/netbird.gpg
       args:
         executable: /bin/bash
       changed_when: false
-      when: enable_tailscale | bool
+      when: enable_netbird | bool
 
-    - name: Add Tailscale apt repo
+    - name: Add NetBird apt repo
       ansible.builtin.apt_repository:
-        repo: "deb [signed-by=/etc/apt/keyrings/tailscale.gpg] https://pkgs.tailscale.com/stable/{{ tailscale_repo_os }} {{ tailscale_repo_codename }} main"
+        repo: "deb [signed-by=/etc/apt/keyrings/netbird.gpg] https://pkgs.netbird.io/debian stable main"
         state: present
-      when: enable_tailscale | bool
+      when: enable_netbird | bool
 
-    - name: Install Tailscale
+    - name: Install NetBird
       ansible.builtin.apt:
-        name: tailscale
+        name: netbird
         state: present
         update_cache: yes
-      when: enable_tailscale | bool
+      when: enable_netbird | bool
 
-    - name: Ensure Tailscale state dir
-      ansible.builtin.file:
-        path: "{{ tailscale_state_dir }}"
-        state: directory
-        owner: root
-        group: root
-        mode: '0700'
-      when: enable_tailscale | bool
+    - name: Enable and start netbird daemon
+      ansible.builtin.service:
+        name: netbird
+        state: started
+        enabled: yes
+      when: enable_netbird | bool
 
-    - name: Bring up Tailscale (auth if needed)
+    - name: Bring up NetBird (register if needed)
       ansible.builtin.shell: |
         set -e
         HOSTNAME=$(grep Serial /proc/cpuinfo | cut -d ' ' -f 2)
-        if ! tailscale status >/dev/null 2>&1; then
-          tailscale up --authkey={{ tailscale_authkey }} --hostname="${HOSTNAME}" {{ tailscale_up_args }}
+        MGMT_ARG=""
+        if [ -n "{{ netbird_management_url }}" ]; then
+          MGMT_ARG="--management-url {{ netbird_management_url }}"
+        fi
+        if netbird status 2>/dev/null | grep -qi 'Management:.*Connected'; then
+          netbird up --hostname="${HOSTNAME}" ${MGMT_ARG} {{ netbird_up_args }}
         else
-          tailscale up --hostname="${HOSTNAME}" {{ tailscale_up_args }}
+          netbird up --setup-key={{ netbird_setup_key }} --hostname="${HOSTNAME}" ${MGMT_ARG} {{ netbird_up_args }}
         fi
       args:
         executable: /bin/bash
-      when: enable_tailscale | bool
-
-    - name: Enable and start tailscaled
-      ansible.builtin.service:
-        name: tailscaled
-        state: started
-        enabled: yes
-      when: enable_tailscale | bool
+      when: enable_netbird | bool
 
   tasks:
     - name: Install WiFi AP packages
@@ -281,8 +266,9 @@
         content: |
           POSTGRES_PASSWORD={{ postgres_password }}
           SYMMETRICDS_TAG={{ symmetricds_tag }}
-          TAILSCALE_AUTHKEY={{ tailscale_authkey }}
-          TAILSCALE_UP_ARGS={{ tailscale_up_args }}
+          NETBIRD_SETUP_KEY={{ netbird_setup_key }}
+          NETBIRD_MANAGEMENT_URL={{ netbird_management_url }}
+          NETBIRD_UP_ARGS={{ netbird_up_args }}
 
     - name: Configure Docker daemon
       ansible.builtin.copy:
