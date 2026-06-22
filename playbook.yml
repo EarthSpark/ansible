@@ -159,7 +159,7 @@
         enabled: yes
       when: enable_netbird | bool
 
-    - name: Bring up NetBird (register if needed)
+    - name: Bring up NetBird (register if a setup key is available)
       ansible.builtin.shell: |
         set -e
         HOSTNAME=$(grep Serial /proc/cpuinfo | cut -d ' ' -f 2)
@@ -168,9 +168,16 @@
           MGMT_ARG="--management-url {{ netbird_management_url }}"
         fi
         if netbird status 2>/dev/null | grep -qi 'Management:.*Connected'; then
+          # Already registered: refresh hostname/flags, no key needed.
           netbird up --hostname="${HOSTNAME}" ${MGMT_ARG} {{ netbird_up_args }}
+        elif [ -n "{{ netbird_setup_key }}" ]; then
+          netbird up --setup-key="{{ netbird_setup_key }}" --hostname="${HOSTNAME}" ${MGMT_ARG} {{ netbird_up_args }}
         else
-          netbird up --setup-key={{ netbird_setup_key }} --hostname="${HOSTNAME}" ${MGMT_ARG} {{ netbird_up_args }}
+          # No setup key and not registered. Skip 'netbird up' — keyless login is
+          # an interactive browser (device-flow) login that would block this
+          # non-interactive task. The operator completes it manually afterwards
+          # (the bootstrap prints the exact command).
+          echo "NetBird not registered and no setup key provided; skipping 'netbird up'."
         fi
       args:
         executable: /bin/bash

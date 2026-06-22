@@ -108,3 +108,9 @@ instead if you want to pre-seed any values from the environment.)
 - Configuration is persisted at `/etc/groundbolt/inventory.ini`.
 - Verify the mesh connection with `netbird status`.
 - Reach the app at `http://localhost/` (or over the NetBird mesh IP).
+
+If you skipped the setup key at the prompt, NetBird is installed but not
+registered — the bootstrap won't run the interactive `netbird up` (it would
+block a non-interactive run). The final output prints the exact `netbird up`
+command to run on the device; it shows a browser login URL to complete
+registration.

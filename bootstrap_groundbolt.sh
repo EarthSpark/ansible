@@ -259,9 +259,30 @@ ANSIBLE_STDOUT_CALLBACK=debug "${VENV_DIR}/bin/ansible-playbook" \
   exit 1
 }
 
+echo ""
 echo "GroundBolt setup complete."
 echo "- Configuration persisted at ${INVENTORY_FILE}"
 echo "- Docker services are deployed under /opt/groundbolt"
 echo "- SymmetricDS env at /etc/compose.d/prod-symmetricds.env"
-echo "- NetBird service (host) is enabled; verify with: netbird status"
-echo "- Access the app on http://localhost/ (or over the NetBird mesh IP)"
+
+# NetBird state and the correct next step.
+if command -v netbird >/dev/null 2>&1; then
+  if netbird status 2>/dev/null | grep -qi 'Management:.*Connected'; then
+    nb_ip="$(netbird status 2>/dev/null | awk -F': ' '/NetBird IP:/{print $2; exit}')"
+    if [ -n "${nb_ip:-}" ]; then
+      echo "- NetBird is up. This device's mesh address: ${nb_ip}"
+    else
+      echo "- NetBird is up (run 'netbird status' for the mesh address)."
+    fi
+  else
+    nb_cmd="sudo netbird up"
+    nb_mgmt="$(inv_get NETBIRD_MANAGEMENT_URL)"
+    nb_args="$(inv_get NETBIRD_UP_ARGS)"
+    if [ -n "$nb_mgmt" ]; then nb_cmd="$nb_cmd --management-url $nb_mgmt"; fi
+    if [ -n "$nb_args" ]; then nb_cmd="$nb_cmd $nb_args"; fi
+    echo "- NetBird is installed but NOT registered (no setup key was provided)."
+    echo "  To enable remote access, run this on the device and open the login URL it prints:"
+    echo "      ${nb_cmd}"
+  fi
+fi
+echo "- Access the app on http://localhost/ (or over the NetBird mesh address above)"
