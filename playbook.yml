@@ -23,13 +23,13 @@
     symmetricds_tag: "{{ SYMMETRICDS_TAG | default('3.7.38.0') }}"
     compose_env_dir: /etc/compose.d
 
-    # GitLab Container Registry
-    gitlab_registry: registry.gitlab.com
-    gitlab_registry_user: "{{ GITLAB_REGISTRY_USER | default('gitlab-ci-token') }}"
-    gitlab_registry_token: "{{ GITLAB_REGISTRY_TOKEN }}"
-    sparkmeter_image: "{{ gitlab_registry }}/sparkmeter/sparkmeter:{{ SPARKMETER_TAG | default('latest') }}"
-    slipstreamj_image: "{{ gitlab_registry }}/sparkmeter/slipstreamj:{{ SLIPSTREAMJ_TAG | default('latest') }}"
-    symmetricds_image: "{{ gitlab_registry }}/sparkmeter/docker-symmetricds:{{ symmetricds_tag }}"
+    # GitHub Container Registry (ghcr.io)
+    ghcr_registry: ghcr.io
+    ghcr_registry_user: "{{ GHCR_REGISTRY_USER | default('') }}"
+    ghcr_registry_token: "{{ GHCR_REGISTRY_TOKEN | default('') }}"
+    sparkmeter_image: "{{ ghcr_registry }}/earthspark/sparkmeter:{{ SPARKMETER_TAG | default('latest') }}"
+    sparknet_http_image: "{{ ghcr_registry }}/earthspark/sparknet-http:{{ SPARKNET_HTTP_TAG | default('latest') }}"
+    symmetricds_image: "{{ ghcr_registry }}/earthspark/docker-symmetricds:{{ symmetricds_tag }}"
 
     # NetBird (remote access)
     enable_netbird: true
@@ -308,11 +308,11 @@
     - name: Ensure udev rules are reloaded if changed
       ansible.builtin.meta: flush_handlers
 
-    - name: Log in to GitLab Container Registry
+    - name: Log in to GitHub Container Registry
       community.docker.docker_login:
-        registry_url: "https://{{ gitlab_registry }}"
-        username: "{{ gitlab_registry_user }}"
-        password: "{{ gitlab_registry_token }}"
+        registry_url: "https://{{ ghcr_registry }}"
+        username: "{{ ghcr_registry_user }}"
+        password: "{{ ghcr_registry_token }}"
 
     - name: Restart docker before image maintenance
       ansible.builtin.service:
@@ -333,7 +333,7 @@
       with_items:
         - "{{ symmetricds_image }}"
         - "{{ sparkmeter_image }}"
-        - "{{ slipstreamj_image }}"
+        - "{{ sparknet_http_image }}"
       ignore_errors: true
       when: FORCE_REPULL | default(false) | bool
 

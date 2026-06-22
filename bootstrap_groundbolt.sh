@@ -28,7 +28,7 @@ set -euo pipefail
 # Configuration & secrets:
 # - Resolved into /etc/groundbolt/inventory.ini (mode 0600) and reused on every
 #   later run. The first run prompts for the secrets (NETBIRD_SETUP_KEY,
-#   GITLAB_REGISTRY_TOKEN) and the per-device GATEWAY_SERIAL;
+#   GHCR_REGISTRY_USER, GHCR_REGISTRY_TOKEN) and the per-device GATEWAY_SERIAL;
 #   VAULT_POSTGRES_PASSWORD is generated once and persisted.
 # - Adding a new variable to INVENTORY_SPECS below makes the next run prompt for
 #   just that one (the script is re-fetched each run, so the list is current).
@@ -92,8 +92,10 @@ INVENTORY_SPECS=(
   "NETBIRD_UP_ARGS:opt:--allow-server-ssh"
   "SYMMETRICDS_TAG:opt:3.7.38.0"
   "SPARKMETER_TAG:opt:2.0-dev.2"
+  "SPARKNET_HTTP_TAG:opt:0.9.9"
   "VAULT_POSTGRES_PASSWORD:autogen:"
-  "GITLAB_REGISTRY_TOKEN:secret:"
+  "GHCR_REGISTRY_USER:plain:"
+  "GHCR_REGISTRY_TOKEN:secret:"
 )
 
 inv_get() {
@@ -162,6 +164,10 @@ write_inventory
 
 if [[ -z "$(inv_get NETBIRD_SETUP_KEY)" ]]; then
   echo "WARNING: NETBIRD_SETUP_KEY is empty. NetBird will not register unless this peer is already logged in." >&2
+fi
+
+if [[ -z "$(inv_get GHCR_REGISTRY_USER)" || -z "$(inv_get GHCR_REGISTRY_TOKEN)" ]]; then
+  echo "WARNING: GHCR_REGISTRY_USER/GHCR_REGISTRY_TOKEN is empty. The ghcr.io docker login and image pulls will fail without GHCR credentials." >&2
 fi
 
 export DEBIAN_FRONTEND=noninteractive

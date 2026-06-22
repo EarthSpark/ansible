@@ -23,8 +23,9 @@ The bootstrap resolves all configuration into a durable inventory at
 3. **a generated value, a default, or an interactive prompt.**
 
 On the first run it prompts for the secrets it doesn't have —
-`NETBIRD_SETUP_KEY`, `GITLAB_REGISTRY_TOKEN` — and the per-device
-`GATEWAY_SERIAL`. `VAULT_POSTGRES_PASSWORD` is generated once and persisted. The
+`NETBIRD_SETUP_KEY`, `GHCR_REGISTRY_USER`, `GHCR_REGISTRY_TOKEN` — and the
+per-device `GATEWAY_SERIAL`. `VAULT_POSTGRES_PASSWORD` is generated once and
+persisted. The
 prompts read from the terminal, so they work even through `curl … | bash`.
 
 Consequences worth knowing:
@@ -40,11 +41,17 @@ Consequences worth knowing:
   `sudo -E` so it survives the sudo).
 - `FORCE_REPULL` / `RESET_DATABASE` are per-run flags read from the environment
   (default `false`); they are not persisted.
+- **Postgres 14 → 18 upgrade**: the stack now runs `postgres:18`. A data volume
+  initialized by an older PG14 image will not start under PG18 — the container
+  crash-loops on a version mismatch. Greenfield deployments are unaffected. To
+  wipe and re-initialize in place, run with `RESET_DATABASE=true` (this destroys
+  all existing data); preserving the data across the major version requires a
+  manual `pg_upgrade`.
 
-`GITLAB_REGISTRY_TOKEN` is always required — it's what `docker login` uses to
-pull the container images from `registry.gitlab.com`. That's a separate concern
-from how the repo files reach the target (below), so it's needed regardless of
-which method you use.
+`GHCR_REGISTRY_USER` / `GHCR_REGISTRY_TOKEN` are always required — they're what
+`docker login` uses to pull the container images from `ghcr.io/earthspark`.
+That's a separate concern from how the repo files reach the target (below), so
+they're needed regardless of which method you use.
 
 ## Running it
 

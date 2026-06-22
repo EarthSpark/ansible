@@ -11,7 +11,7 @@ x-logging: &default_logging
 
 services:
   postgres:
-    image: postgres:14
+    image: postgres:18
     environment:
       POSTGRES_DB: {{ postgres_db }}
       POSTGRES_USER: {{ postgres_user }}
@@ -31,29 +31,48 @@ services:
   # port 5001 for internal admin/proxy endpoints (NOT mapped — only reachable
   # from inside the container via `docker compose exec`).
   #
-  # On ground deployments the FastAPI lifespan spawns the Ohm subprocess (the
-  # binary is baked into the image at /usr/local/bin/ohm) and owns it for the
-  # lifetime of the container. The container needs the host's gateway serial
-  # device passed in for that to work.
+  # The metering provider runs as its own service (sparknet-http); the webapp
+  # reaches it over METERING_PROVIDER_URL. The webapp no longer owns the
+  # gateway serial device — that moves to sparknet-http, which drives the radio.
   app:
     image: {{ sparkmeter_image }}
     command: /app/run/webapp
     environment:
       <<: *app_env
-      OHM_BINARY: /usr/local/bin/ohm
+      METERING_PROVIDER_URL: http://sparknet-http:8080
     ports:
       - "80:5000"
-    devices:
-      - "{{ usb_gateway_device }}:/dev/gateway"
-    group_add:
-      - "{{ dialout_gid }}"
     depends_on:
       postgres:
         condition: service_healthy
+      sparknet-http:
+        condition: service_started
     logging: *default_logging
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:5000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Metering provider: the SparkNet controller core with an HTTP+SSE API.
+  # It drives the gateway radio over the host's serial device (passed in here
+  # plus the dialout group) and serves the API on port 8080, which the webapp
+  # reaches via METERING_PROVIDER_URL. Configured declaratively through
+  # SPARKNET_HTTP_* env vars, which the image entrypoint maps to CLI flags.
+  sparknet-http:
+    image: {{ sparknet_http_image }}
+    environment:
+      SPARKNET_HTTP_BIND: "0.0.0.0:8080"
+      SPARKNET_HTTP_DEVICE: /dev/gateway
+    devices:
+      - "{{ usb_gateway_device }}:/dev/gateway"
+    group_add:
+      - "{{ dialout_gid }}"
+    logging: *default_logging
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz >/dev/null 2>&1 || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
