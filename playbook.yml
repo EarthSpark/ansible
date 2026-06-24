@@ -24,6 +24,25 @@
     thundercloud_project_name: thundercloud
     metering_provider_url: "{{ METERING_PROVIDER_URL | default('http://sparknet-http:8080') }}"
 
+    # sparknet-http gateway config. Each named entry's keys ARE the
+    # SPARKNET_HTTP_* env var names for that gateway — the dict literally is the
+    # env. A deployment selects one entry by name via the `gateway` selector;
+    # custom hardware adds an entry or sets SPARKNET_HTTP_* override vars (which
+    # win over the selected entry). No per-hardware code branches.
+    gateway_configs:
+      nova:
+        SPARKNET_HTTP_DEVICE: /dev/ttyS4
+        SPARKNET_HTTP_GATEWAY_TYPE: rsrm
+        SPARKNET_HTTP_RESET_METHOD: "gpio:low,45"
+        SPARKNET_HTTP_BOOTLOADER_METHOD: "gpio:high,86"
+      cm5:
+        SPARKNET_HTTP_DEVICE: /dev/gateway
+        SPARKNET_HTTP_GATEWAY_TYPE: detect
+      da1000:
+        SPARKNET_HTTP_GATEWAY_TYPE: detect
+    # Selected gateway. cm5 (USB /dev/gateway + detect) is the generic default.
+    gateway: "{{ GATEWAY | default('cm5') }}"
+
     # Core service config
     postgres_db: mydb
     postgres_user: spark
@@ -61,11 +80,8 @@
     wifi_dhcp_range_start: 10.42.0.10
     wifi_dhcp_range_end: 10.42.0.100
 
-    # USB gateway device path and dialout group id (verify on target)
     gateway_serial: "{{ GATEWAY_SERIAL | default('', true) }}"
     flasher_serial: "{{ FLASHER_SERIAL | default('', true) }}"
-    usb_gateway_device: /dev/gateway
-    dialout_gid: 20
 
     # Docker install method
     docker_apt_repo_channel: stable
@@ -278,6 +294,25 @@
         mode: '0644'
       when: enable_thundercloud | bool
 
+
+    - name: Assert the selected gateway is known (or a device override is set)
+      ansible.builtin.assert:
+        that:
+          - gateway in gateway_configs or (SPARKNET_HTTP_DEVICE | default('', true) | length > 0)
+        fail_msg: >-
+          Unknown gateway '{{ gateway }}'. Pick a known gateway
+          (nova / cm5 / da1000) via the GATEWAY inventory var, or set a
+          non-empty SPARKNET_HTTP_DEVICE override.
+      when: enable_sparknet_http | bool
+
+    - name: Template sparknet-http environment file
+      ansible.builtin.template:
+        src: templates/compose.d/sparknet-http.env.j2
+        dest: "{{ compose_env_dir }}/sparknet-http.env"
+        owner: root
+        group: root
+        mode: '0644'
+      when: enable_sparknet_http | bool
 
     - name: Template SymmetricDS environment file
       ansible.builtin.template:

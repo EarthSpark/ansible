@@ -7,19 +7,20 @@ x-logging: &default_logging
 
 services:
   # Metering provider: the SparkNet controller core with an HTTP+SSE API.
-  # It drives the gateway radio over the host's serial device (passed in here
-  # plus the dialout group) and serves the API on port 8080, which the webapp
-  # reaches via METERING_PROVIDER_URL. Configured declaratively through
-  # SPARKNET_HTTP_* env vars, which the image entrypoint maps to CLI flags.
+  # It drives the gateway radio over the host's serial device and serves the API
+  # on port 8080, which the webapp reaches via METERING_PROVIDER_URL. Configured
+  # declaratively through SPARKNET_HTTP_* env vars, which the image entrypoint
+  # maps to CLI flags. Runs privileged so the host's /dev and /sys are visible —
+  # this replaces device/group passthrough uniformly across gateways.
+  #
+  # The resolved SPARKNET_HTTP_* env is rendered into a readable env_file (the
+  # selected gateway_configs entry merged with any per-host overrides plus the
+  # fixed BIND), so this service definition stays static across every gateway.
   sparknet-http:
     image: {{ sparknet_http_image }}
-    environment:
-      SPARKNET_HTTP_BIND: "0.0.0.0:8080"
-      SPARKNET_HTTP_DEVICE: /dev/gateway
-    devices:
-      - "{{ usb_gateway_device }}:/dev/gateway"
-    group_add:
-      - "{{ dialout_gid }}"
+    privileged: true
+    env_file:
+      - {{ compose_env_dir }}/sparknet-http.env
     networks:
       - sparkapp
     logging: *default_logging

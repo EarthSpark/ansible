@@ -86,6 +86,7 @@ INVENTORY_FILE="/etc/groundbolt/inventory.ini"
 # key:kind:default     kind = secret | plain | opt | autogen
 INVENTORY_SPECS=(
   "GATEWAY_SERIAL:plain:"
+  "GATEWAY:plain:"
   "FLASHER_SERIAL:opt:"
   "NETBIRD_SETUP_KEY:secret:"
   "NETBIRD_MANAGEMENT_URL:opt:"
