@@ -1,0 +1,35 @@
+
+x-logging: &default_logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  # Metering provider: the SparkNet controller core with an HTTP+SSE API.
+  # It drives the gateway radio over the host's serial device (passed in here
+  # plus the dialout group) and serves the API on port 8080, which the webapp
+  # reaches via METERING_PROVIDER_URL. Configured declaratively through
+  # SPARKNET_HTTP_* env vars, which the image entrypoint maps to CLI flags.
+  sparknet-http:
+    image: {{ sparknet_http_image }}
+    environment:
+      SPARKNET_HTTP_BIND: "0.0.0.0:8080"
+      SPARKNET_HTTP_DEVICE: /dev/gateway
+    devices:
+      - "{{ usb_gateway_device }}:/dev/gateway"
+    group_add:
+      - "{{ dialout_gid }}"
+    networks:
+      - sparkapp
+    logging: *default_logging
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+networks:
+  sparkapp:
+    external: true

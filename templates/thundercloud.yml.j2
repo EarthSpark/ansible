@@ -18,6 +18,8 @@ services:
       POSTGRES_PASSWORD: {{ postgres_password }}
     volumes:
       - pg_data:/var/lib/postgresql/data
+    networks:
+      - sparkapp
     logging: *default_logging
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U {{ postgres_user }} -d {{ postgres_db }} -h localhost"]
@@ -31,48 +33,27 @@ services:
   # port 5001 for internal admin/proxy endpoints (NOT mapped — only reachable
   # from inside the container via `docker compose exec`).
   #
-  # The metering provider runs as its own service (sparknet-http); the webapp
-  # reaches it over METERING_PROVIDER_URL. The webapp no longer owns the
-  # gateway serial device — that moves to sparknet-http, which drives the radio.
+  # The metering provider runs as its own service (sparknet-http) in its own
+  # compose project; the webapp reaches it over METERING_PROVIDER_URL by service
+  # name on the shared external sparkapp network. There is no depends_on across
+  # projects — the webapp reaches the provider over HTTP and retries.
   app:
     image: {{ sparkmeter_image }}
     command: /app/run/webapp
     environment:
       <<: *app_env
-      METERING_PROVIDER_URL: http://sparknet-http:8080
+      METERING_PROVIDER_URL: "{{ metering_provider_url | default('http://sparknet-http:8080') }}"
     ports:
       - "80:5000"
     depends_on:
       postgres:
         condition: service_healthy
-      sparknet-http:
-        condition: service_started
+    networks:
+      - sparkapp
     logging: *default_logging
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:5000/health || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
-  # Metering provider: the SparkNet controller core with an HTTP+SSE API.
-  # It drives the gateway radio over the host's serial device (passed in here
-  # plus the dialout group) and serves the API on port 8080, which the webapp
-  # reaches via METERING_PROVIDER_URL. Configured declaratively through
-  # SPARKNET_HTTP_* env vars, which the image entrypoint maps to CLI flags.
-  sparknet-http:
-    image: {{ sparknet_http_image }}
-    environment:
-      SPARKNET_HTTP_BIND: "0.0.0.0:8080"
-      SPARKNET_HTTP_DEVICE: /dev/gateway
-    devices:
-      - "{{ usb_gateway_device }}:/dev/gateway"
-    group_add:
-      - "{{ dialout_gid }}"
-    logging: *default_logging
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz >/dev/null 2>&1 || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -92,4 +73,8 @@ services:
 
 
 volumes:
-  pg_data: 
+  pg_data:
+
+networks:
+  sparkapp:
+    external: true

@@ -121,3 +121,38 @@ registered — the bootstrap won't run the interactive `netbird up` (it would
 block a non-interactive run). The final output prints the exact `netbird up`
 command to run on the device; it shows a browser login URL to complete
 registration.
+
+## Extending the deployment
+
+Each component runs as its own compose project on a shared network, so you can
+run your own services alongside the deployment — for example your own application
+talking to the gateway in place of `thundercloud`, or `thundercloud` together
+with your own sidecar services. You do that from your own ansible/compose,
+integrating through two stable surfaces this deployment exposes.
+
+### The inventory — `/etc/groundbolt/inventory.ini`
+
+The resolved configuration (image tags, gateway serial, registry creds, etc.).
+Point your own playbook at it:
+
+    ansible-playbook -i /etc/groundbolt/inventory.ini your-playbook.yml
+
+### The `sparkapp` network — a shared external Docker network
+
+Our services run on it; join it to reach them by name. In your compose:
+
+    networks:
+      sparkapp:
+        external: true
+
+    services:
+      my-service:
+        image: my-image
+        networks: [sparkapp]
+        environment:
+          METERING_URL: http://sparknet-http:8080
+
+Compose registers each service's name as a network alias, so your containers
+reach `sparknet-http` (the gateway, port 8080) and `app` (the webapp) across
+project boundaries. There is no cross-project `depends_on` — reach a service over
+the network and retry until it answers.

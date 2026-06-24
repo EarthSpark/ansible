@@ -186,7 +186,8 @@ fetch_from_fileserver() {
   # List of required files relative to the server root (served from the repo dir)
   local files=(
     "playbook.yml"
-    "templates/docker-compose.yml.j2"
+    "templates/sparknet-http.yml.j2"
+    "templates/thundercloud.yml.j2"
     "templates/compose.d/prod-symmetricds.env.j2"
     "templates/udev/98-usb-serial.rules.j2"
     "templates/wifi/hostapd.conf.j2"

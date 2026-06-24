@@ -8,8 +8,21 @@
 
   vars:
     project_root: /opt/groundbolt
-    compose_file: docker-compose.yml
-    compose_project_name: groundbolt
+
+    # Shared external network that every component (ours or a customer's) joins.
+    # Cross-component reach is by service name on this network.
+    sparkapp_network: sparkapp
+
+    # Component compose projects. Each is rendered to its own file and brought
+    # up as its OWN compose project; cross-project ordering is not expressed —
+    # services reach each other by name over the sparkapp network and retry.
+    enable_sparknet_http: true
+    enable_thundercloud: true
+    sparknet_http_compose_file: sparknet-http.yml
+    sparknet_http_project_name: sparknet-http
+    thundercloud_compose_file: thundercloud.yml
+    thundercloud_project_name: thundercloud
+    metering_provider_url: "{{ METERING_PROVIDER_URL | default('http://sparknet-http:8080') }}"
 
     # Core service config
     postgres_db: mydb
@@ -247,13 +260,23 @@
         - "{{ project_root }}/secrets"
         - "{{ compose_env_dir }}"
 
-    - name: Template docker-compose.yml
+    - name: Template sparknet-http component compose
       ansible.builtin.template:
-        src: templates/docker-compose.yml.j2
-        dest: "{{ project_root }}/{{ compose_file }}"
+        src: templates/sparknet-http.yml.j2
+        dest: "{{ project_root }}/{{ sparknet_http_compose_file }}"
         owner: root
         group: root
         mode: '0644'
+      when: enable_sparknet_http | bool
+
+    - name: Template thundercloud component compose
+      ansible.builtin.template:
+        src: templates/thundercloud.yml.j2
+        dest: "{{ project_root }}/{{ thundercloud_compose_file }}"
+        owner: root
+        group: root
+        mode: '0644'
+      when: enable_thundercloud | bool
 
 
     - name: Template SymmetricDS environment file
@@ -314,6 +337,11 @@
         username: "{{ ghcr_registry_user }}"
         password: "{{ ghcr_registry_token }}"
 
+    - name: Create the shared external sparkapp network (idempotent)
+      community.docker.docker_network:
+        name: "{{ sparkapp_network }}"
+        state: present
+
     - name: Restart docker before image maintenance
       ansible.builtin.service:
         name: docker
@@ -337,38 +365,61 @@
       ignore_errors: true
       when: FORCE_REPULL | default(false) | bool
 
-    - name: Stop compose stack before volume reset
+    - name: Stop thundercloud compose project before volume reset
       community.docker.docker_compose_v2:
         project_src: "{{ project_root }}"
         files:
-          - "{{ compose_file }}"
-        project_name: "{{ compose_project_name }}"
+          - "{{ thundercloud_compose_file }}"
+        project_name: "{{ thundercloud_project_name }}"
         state: absent
-      when: RESET_DATABASE | default(false) | bool
+      when:
+        - RESET_DATABASE | default(false) | bool
+        - enable_thundercloud | bool
       ignore_errors: true
 
     - name: Remove postgres volume for fresh init
       community.docker.docker_volume:
-        name: "{{ compose_project_name }}_pg_data"
+        name: "{{ thundercloud_project_name }}_pg_data"
         state: absent
-      when: RESET_DATABASE | default(false) | bool
+      when:
+        - RESET_DATABASE | default(false) | bool
+        - enable_thundercloud | bool
 
-    - name: Bring up docker-compose stack (ensure running)
+    - name: Bring up sparknet-http compose project (ensure running)
       community.docker.docker_compose_v2:
         project_src: "{{ project_root }}"
         files:
-          - "{{ compose_file }}"
-        project_name: "{{ compose_project_name }}"
+          - "{{ sparknet_http_compose_file }}"
+        project_name: "{{ sparknet_http_project_name }}"
         state: present
         recreate: auto
         remove_orphans: true
         pull: missing
-      register: compose_result
+      register: sparknet_http_compose_result
+      when: enable_sparknet_http | bool
 
-    - name: Show docker-compose changes
+    - name: Bring up thundercloud compose project (ensure running)
+      community.docker.docker_compose_v2:
+        project_src: "{{ project_root }}"
+        files:
+          - "{{ thundercloud_compose_file }}"
+        project_name: "{{ thundercloud_project_name }}"
+        state: present
+        recreate: auto
+        remove_orphans: true
+        pull: missing
+      register: thundercloud_compose_result
+      when: enable_thundercloud | bool
+
+    - name: Show sparknet-http compose changes
       ansible.builtin.debug:
-        var: compose_result
-      when: compose_result is defined
+        var: sparknet_http_compose_result
+      when: sparknet_http_compose_result is defined
+
+    - name: Show thundercloud compose changes
+      ansible.builtin.debug:
+        var: thundercloud_compose_result
+      when: thundercloud_compose_result is defined
 
   handlers:
     - name: Reload udev rules
