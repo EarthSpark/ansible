@@ -19,11 +19,11 @@ set -euo pipefail
 #     Linux:  echo "http://$(hostname -I | awk '{print $1}'):8000"
 #
 # Pulling from git instead of a web server (recommended: forward your SSH agent
-# with `ssh -A` so the target authenticates to GitLab with your key, and use
+# with `ssh -A` so the target authenticates to GitHub with your key, and use
 # `sudo -E` so the forwarded SSH_AUTH_SOCK survives the sudo):
 #
 #   curl -fsSL <RAW_SCRIPT_URL> \
-#     | sudo -E bash -s -- --repo git@gitlab.com:sparkmeter/earthspark/ansible.git --ref main
+#     | sudo -E bash -s -- --repo git@github.com:EarthSpark/ansible.git --ref main
 #
 # Configuration & secrets:
 # - Resolved into /etc/groundbolt/inventory.ini (mode 0600) and reused on every

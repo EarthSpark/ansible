@@ -58,19 +58,19 @@ they're needed regardless of which method you use.
 The target must be Debian/Ubuntu (apt-based). There are two ways to get the
 playbook files onto it.
 
-### Option A — clone from GitLab (recommended)
+### Option A — clone from GitHub (recommended)
 
 Forward your SSH agent into the target (`ssh -A`) so its git operations
-authenticate to GitLab with your key — no token or key on the box. Clone the
+authenticate to GitHub with your key — no token or key on the box. Clone the
 repo to get the script, then run it pointing `--repo` at the same URL. `sudo -E`
 is required so the forwarded `SSH_AUTH_SOCK` survives the sudo:
 
 ```sh
 ssh -A user@target
 # on the target:
-git clone git@gitlab.com:sparkmeter/earthspark/ansible.git
+git clone git@github.com:EarthSpark/ansible.git
 sudo -E bash ansible/bootstrap_groundbolt.sh \
-  --repo git@gitlab.com:sparkmeter/earthspark/ansible.git --ref main
+  --repo git@github.com:EarthSpark/ansible.git --ref main
 ```
 
 `--repo` re-checks out the repo under `/opt/groundbolt-setup/repo` (refreshed on
@@ -84,7 +84,7 @@ folder** — the bootstrap expects the files at the server root
 (`playbook.yml`, `templates/...`):
 
 ```sh
-git clone git@gitlab.com:sparkmeter/earthspark/ansible.git
+git clone git@github.com:EarthSpark/ansible.git
 cd ansible
 python3 -m http.server 8000
 ```
