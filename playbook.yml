@@ -57,11 +57,9 @@
 
     # GitHub Container Registry (ghcr.io)
     ghcr_registry: ghcr.io
-    ghcr_registry_user: "{{ GHCR_REGISTRY_USER | default('') }}"
-    ghcr_registry_token: "{{ GHCR_REGISTRY_TOKEN | default('') }}"
     sparkmeter_image: "{{ ghcr_registry }}/earthspark/sparkmeter:{{ SPARKMETER_TAG | default('latest') }}"
     sparknet_http_image: "{{ ghcr_registry }}/earthspark/sparknet-http:{{ SPARKNET_HTTP_TAG | default('latest') }}"
-    symmetricds_image: "{{ ghcr_registry }}/earthspark/docker-symmetricds:{{ symmetricds_tag }}"
+    symmetricds_image: "{{ ghcr_registry }}/earthspark/symmetricds:{{ symmetricds_tag }}"
 
     # NetBird (remote access)
     enable_netbird: true
@@ -365,12 +363,6 @@
 
     - name: Ensure udev rules are reloaded if changed
       ansible.builtin.meta: flush_handlers
-
-    - name: Log in to GitHub Container Registry
-      community.docker.docker_login:
-        registry_url: "https://{{ ghcr_registry }}"
-        username: "{{ ghcr_registry_user }}"
-        password: "{{ ghcr_registry_token }}"
 
     - name: Create the shared external sparkapp network (idempotent)
       community.docker.docker_network:

@@ -18,18 +18,15 @@ set -euo pipefail
 #     macOS:  echo "http://$(ipconfig getifaddr en0):8000"
 #     Linux:  echo "http://$(hostname -I | awk '{print $1}'):8000"
 #
-# Pulling from git instead of a web server (recommended: forward your SSH agent
-# with `ssh -A` so the target authenticates to GitHub with your key, and use
-# `sudo -E` so the forwarded SSH_AUTH_SOCK survives the sudo):
+# Pulling from git instead of a web server:
 #
 #   curl -fsSL <RAW_SCRIPT_URL> \
-#     | sudo -E bash -s -- --repo git@github.com:EarthSpark/ansible.git --ref main
+#     | sudo bash -s -- --repo https://github.com/EarthSpark/ansible.git --ref main
 #
 # Configuration & secrets:
 # - Resolved into /etc/groundbolt/inventory.ini (mode 0600) and reused on every
-#   later run. The first run prompts for the secrets (NETBIRD_SETUP_KEY,
-#   GHCR_REGISTRY_USER, GHCR_REGISTRY_TOKEN) and the per-device GATEWAY_SERIAL;
-#   VAULT_POSTGRES_PASSWORD is generated once and persisted.
+#   later run. The first run prompts for the secrets (NETBIRD_SETUP_KEY) and the
+#   per-device GATEWAY_SERIAL; VAULT_POSTGRES_PASSWORD is generated once and persisted.
 # - Adding a new variable to INVENTORY_SPECS below makes the next run prompt for
 #   just that one (the script is re-fetched each run, so the list is current).
 # - Any value may be pre-seeded as an environment variable to skip the prompt
@@ -95,8 +92,6 @@ INVENTORY_SPECS=(
   "SPARKMETER_TAG:opt:2.0-dev.2"
   "SPARKNET_HTTP_TAG:opt:0.9.9"
   "VAULT_POSTGRES_PASSWORD:autogen:"
-  "GHCR_REGISTRY_USER:plain:"
-  "GHCR_REGISTRY_TOKEN:secret:"
 )
 
 inv_get() {
@@ -165,10 +160,6 @@ write_inventory
 
 if [[ -z "$(inv_get NETBIRD_SETUP_KEY)" ]]; then
   echo "WARNING: NETBIRD_SETUP_KEY is empty. NetBird will not register unless this peer is already logged in." >&2
-fi
-
-if [[ -z "$(inv_get GHCR_REGISTRY_USER)" || -z "$(inv_get GHCR_REGISTRY_TOKEN)" ]]; then
-  echo "WARNING: GHCR_REGISTRY_USER/GHCR_REGISTRY_TOKEN is empty. The ghcr.io docker login and image pulls will fail without GHCR credentials." >&2
 fi
 
 export DEBIAN_FRONTEND=noninteractive
