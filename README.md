@@ -54,13 +54,14 @@ this repo and the playbook, then provisions the host:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/EarthSpark/ansible/main/bootstrap_groundbolt.sh \
-  | sudo bash -s -- --repo https://github.com/EarthSpark/ansible.git --ref main
+  | sudo bash
 ```
 
-`--repo` checks the repo out under `/opt/groundbolt-setup/repo` (refreshed each
-run), so re-running picks up the latest `main`. Prompts read from the terminal,
-so they work through the pipe; to pre-seed a secret and skip its prompt, `export
-VAR=…` and use `sudo -E`.
+It clones the repo under `/opt/groundbolt-setup/repo` (refreshed each run), so
+re-running picks up the latest `main`. Prompts read from the terminal, so they
+work through the pipe; to pre-seed a secret and skip its prompt, `export VAR=…`
+and use `sudo -E`. Pass `--repo <url>` / `--ref <branch>` to run from a fork or
+branch instead.
 
 ## After it finishes
 

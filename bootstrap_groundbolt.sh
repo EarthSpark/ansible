@@ -7,21 +7,18 @@ set -euo pipefail
 # downloads the Ansible playbook + templates (from a local web server or a git
 # repo), then runs the playbook against localhost to provision the host.
 #
-# Run as root on the target. The script prompts for any secrets it doesn't
-# already have, so the simplest invocation needs nothing else:
+# Run as root on the target. It clones this repo and runs the playbook against
+# localhost; the simplest invocation needs nothing else:
 #
-#   curl -fsSL http://<WEBSERVER>/bootstrap_groundbolt.sh \
-#     | sudo bash -s -- --fileserver http://<WEBSERVER>
+#   curl -fsSL https://raw.githubusercontent.com/EarthSpark/ansible/main/bootstrap_groundbolt.sh \
+#     | sudo bash
 #
-#   <WEBSERVER> is host:port of the machine serving this repo (see README.md).
-#   Find it by running THIS on the serving machine (not the target):
-#     macOS:  echo "http://$(ipconfig getifaddr en0):8000"
-#     Linux:  echo "http://$(hostname -I | awk '{print $1}'):8000"
-#
-# Pulling from git instead of a web server:
-#
-#   curl -fsSL <RAW_SCRIPT_URL> \
-#     | sudo bash -s -- --repo https://github.com/EarthSpark/ansible.git --ref main
+# Overrides:
+#   --repo <url> / --ref <branch>    run from a fork or branch instead of the default
+#   --fileserver http://<host:port>  fetch files from a local web server instead of
+#     cloning. Serve this repo's root; find the URL on the serving machine with:
+#       macOS:  echo "http://$(ipconfig getifaddr en0):8000"
+#       Linux:  echo "http://$(hostname -I | awk '{print $1}'):8000"
 #
 # Configuration & secrets:
 # - Resolved into /etc/groundbolt/inventory.ini (mode 0600) and reused on every
@@ -39,7 +36,7 @@ set -euo pipefail
 # - Installs Docker and the NetBird client, then deploys the docker-compose stack.
 # - Ansible runs against localhost (local connection), not over SSH.
 
-REPO_URL=""
+REPO_URL="https://github.com/EarthSpark/ansible.git"
 REPO_REF="main"
 FILESERVER_URL=""
 
