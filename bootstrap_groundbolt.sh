@@ -86,7 +86,7 @@ INVENTORY_SPECS=(
   "NETBIRD_MANAGEMENT_URL:opt:"
   "NETBIRD_UP_ARGS:opt:--allow-server-ssh"
   "SYMMETRICDS_TAG:opt:3.7.38.0"
-  "SPARKMETER_TAG:opt:2.0-dev.2"
+  "THUNDERCLOUD_TAG:opt:2.0-dev.2"
   "SPARKNET_HTTP_TAG:opt:0.1.43"
   "VAULT_POSTGRES_PASSWORD:autogen:"
 )

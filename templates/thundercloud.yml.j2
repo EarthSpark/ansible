@@ -38,7 +38,7 @@ services:
   # name on the shared external sparkapp network. There is no depends_on across
   # projects — the webapp reaches the provider over HTTP and retries.
   app:
-    image: {{ sparkmeter_image }}
+    image: {{ thundercloud_image }}
     command: /app/run/webapp
     environment:
       <<: *app_env

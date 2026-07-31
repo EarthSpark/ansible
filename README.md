@@ -34,7 +34,7 @@ Consequences worth knowing:
 - **Adding a new secret to the repo** (a new entry in the script's
   `INVENTORY_SPECS`) makes the next run prompt for just that one, because the
   script is re-fetched each run.
-- **To change a persisted value** (e.g. bump `SPARKMETER_TAG`), edit
+- **To change a persisted value** (e.g. bump `THUNDERCLOUD_TAG`), edit
   `/etc/groundbolt/inventory.ini` or delete that line to be re-prompted/defaulted.
 - **Pre-seed to skip a prompt** by exporting the variable before running (with
   `sudo -E` so it survives the sudo).

@@ -57,7 +57,7 @@
 
     # GitHub Container Registry (ghcr.io)
     ghcr_registry: ghcr.io
-    sparkmeter_image: "{{ ghcr_registry }}/earthspark/sparkmeter:{{ SPARKMETER_TAG | default('latest') }}"
+    thundercloud_image: "{{ ghcr_registry }}/earthspark/thundercloud:{{ THUNDERCLOUD_TAG | default('latest') }}"
     sparknet_http_image: "{{ ghcr_registry }}/earthspark/sparknet-http:{{ SPARKNET_HTTP_TAG | default('latest') }}"
     symmetricds_image: "{{ ghcr_registry }}/earthspark/symmetricds:{{ symmetricds_tag }}"
 
@@ -387,7 +387,7 @@
         force_absent: true
       with_items:
         - "{{ symmetricds_image }}"
-        - "{{ sparkmeter_image }}"
+        - "{{ thundercloud_image }}"
         - "{{ sparknet_http_image }}"
       ignore_errors: true
       when: FORCE_REPULL | default(false) | bool
