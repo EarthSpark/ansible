@@ -2,6 +2,20 @@
 x-app-env: &app_env
   APP_ENV: production
   DATABASE_URL: postgresql://{{ postgres_user }}:{{ postgres_password }}@postgres:5432/{{ postgres_db }}
+  SM_SECRET_KEY: "{{ sm_secret_key }}"
+  SM_SECURITY_PASSWORD_SALT: "{{ sm_security_password_salt }}"
+{% if sm_serial %}
+  SM_SERIAL: "{{ sm_serial }}"
+{% endif %}
+{% if sm_ground_name %}
+  SM_GROUND_NAME: "{{ sm_ground_name }}"
+{% endif %}
+{% if sm_api_endpoint %}
+  SM_API_ENDPOINT: "{{ sm_api_endpoint }}"
+{% endif %}
+{% if sparkcloud_api_key %}
+  SM_SPARKCLOUD_API_KEY: "{{ sparkcloud_api_key }}"
+{% endif %}
 
 x-logging: &default_logging
   driver: json-file

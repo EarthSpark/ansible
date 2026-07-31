@@ -89,7 +89,14 @@ INVENTORY_SPECS=(
   "THUNDERCLOUD_TAG:opt:2.0-dev.2"
   "SPARKNET_HTTP_TAG:opt:0.1.43"
   "PULL_POLICY:opt:missing"
+  "SYMDS_REGISTRATION_URL:plain:"
+  "SM_SERIAL:plain:"
+  "SM_GROUND_NAME:plain:"
+  "SM_API_ENDPOINT:plain:"
+  "SPARKCLOUD_API_KEY:secret:"
   "VAULT_POSTGRES_PASSWORD:autogen:"
+  "VAULT_SM_SECRET_KEY:autogen:"
+  "VAULT_SM_SECURITY_PASSWORD_SALT:autogen:"
 )
 
 inv_get() {

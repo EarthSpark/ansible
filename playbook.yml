@@ -47,12 +47,22 @@
     postgres_db: mydb
     postgres_user: spark
     postgres_password: "{{ VAULT_POSTGRES_PASSWORD }}"
+    sm_secret_key: "{{ VAULT_SM_SECRET_KEY }}"
+    sm_security_password_salt: "{{ VAULT_SM_SECURITY_PASSWORD_SALT }}"
+    # Site identity and cloud API. Each is emitted into the app environment
+    # only when set; an empty SM_* override would replace the setting default
+    # with an empty string rather than leave it unset.
+    sm_serial: "{{ SM_SERIAL | default('') }}"
+    sm_ground_name: "{{ SM_GROUND_NAME | default('') }}"
+    sm_api_endpoint: "{{ SM_API_ENDPOINT | default('') }}"
+    sparkcloud_api_key: "{{ SPARKCLOUD_API_KEY | default('') }}"
 
     rabbitmq_user: guest
     rabbitmq_pass: guest
 
     # SymmetricDS
     symmetricds_tag: "{{ SYMMETRICDS_TAG | default('3.7.38.0') }}"
+    symds_registration_url: "{{ SYMDS_REGISTRATION_URL | default('') }}"
     compose_env_dir: /etc/compose.d
 
     # GitHub Container Registry (ghcr.io)
