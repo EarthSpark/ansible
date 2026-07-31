@@ -421,7 +421,7 @@
         state: present
         recreate: auto
         remove_orphans: true
-        pull: missing
+        pull: "{{ PULL_POLICY | default('missing') }}"
       register: sparknet_http_compose_result
       when: enable_sparknet_http | bool
 
@@ -434,7 +434,7 @@
         state: present
         recreate: auto
         remove_orphans: true
-        pull: missing
+        pull: "{{ PULL_POLICY | default('missing') }}"
       register: thundercloud_compose_result
       when: enable_thundercloud | bool
 
