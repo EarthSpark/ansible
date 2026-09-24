@@ -35,12 +35,14 @@
         SPARKNET_HTTP_GATEWAY_TYPE: rsrm
         SPARKNET_HTTP_RESET_METHOD: "gpio:low,45"
         SPARKNET_HTTP_BOOTLOADER_METHOD: "gpio:high,86"
+      # sparknet-http accepts rsrm, firefly and emulator as gateway types; the
+      # DA-1000 is a firefly gateway.
       cm5:
         SPARKNET_HTTP_DEVICE: /dev/gateway
-        SPARKNET_HTTP_GATEWAY_TYPE: detect
+        SPARKNET_HTTP_GATEWAY_TYPE: firefly
       da1000:
-        SPARKNET_HTTP_GATEWAY_TYPE: detect
-    # Selected gateway. cm5 (USB /dev/gateway + detect) is the generic default.
+        SPARKNET_HTTP_GATEWAY_TYPE: firefly
+    # Selected gateway. cm5 (USB /dev/gateway + firefly) is the generic default.
     gateway: "{{ GATEWAY | default('cm5') }}"
 
     # Core service config

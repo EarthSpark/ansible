@@ -9,16 +9,21 @@ services:
   # Metering provider: the SparkNet controller core with an HTTP+SSE API.
   # It drives the gateway radio over the host's serial device and serves the API
   # on port 8080, which the webapp reaches via METERING_PROVIDER_URL. Configured
-  # declaratively through SPARKNET_HTTP_* env vars, which the image entrypoint
-  # maps to CLI flags. Runs privileged so the host's /dev and /sys are visible —
+  # declaratively through SPARKNET_HTTP_* env vars, which the binary reads
+  # directly. Runs privileged so the host's /dev and /sys are visible —
   # this replaces device/group passthrough uniformly across gateways.
   #
   # The resolved SPARKNET_HTTP_* env is rendered into a readable env_file (the
   # selected gateway_configs entry merged with any per-host overrides plus the
   # fixed BIND), so this service definition stays static across every gateway.
+  #
+  # stdin_open: the binary serves a legacy line protocol on stdin and exits
+  # with status 1 when stdin reaches end-of-file, which is what a
+  # non-interactive container gets. Keeping stdin open holds it running.
   sparknet-http:
     image: {{ sparknet_http_image }}
     privileged: true
+    stdin_open: true
     env_file:
       - {{ compose_env_dir }}/sparknet-http.env
     networks:
@@ -26,7 +31,7 @@ services:
     logging: *default_logging
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz >/dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/v1/healthz >/dev/null 2>&1 || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
